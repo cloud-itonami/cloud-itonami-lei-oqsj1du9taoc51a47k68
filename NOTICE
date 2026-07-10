@@ -1,0 +1,14 @@
+NOTICE
+
+The Terms of Use / Terms and Conditions text archived under 80-data/public/tos.journal.edn
+in this repository was authored and published by Starbucks Corporation and remains that company's
+copyright. It is included here for reference/analysis purposes only, with source-url and
+retrieved-at provenance recorded alongside each entry, and is not asserted as this
+project's own work.
+
+This repository's own structure (README, blueprint.edn, journal schema, tooling) is
+licensed AGPL-3.0-or-later per LICENSE. That license does NOT extend to the archived
+third-party text itself.
+
+This project is an independent third-party archive/analysis. It is not affiliated with,
+endorsed by, or sponsored by Starbucks Corporation.
