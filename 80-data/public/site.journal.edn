@@ -1,0 +1,4 @@
+[["starbucks-site-1" :site/url "https://www.starbucks.com" 1 :add]
+ ["starbucks-site-1" :site/checked-at "2026-07-18" 1 :add]
+ ["starbucks-site-1" :site/http-status 200 1 :add]
+ ["starbucks-site-1" :site/title "Starbucks Coffee Company" 1 :add]]
