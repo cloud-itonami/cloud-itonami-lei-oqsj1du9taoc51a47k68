@@ -1,0 +1,101 @@
+(ns tosmonitor.sim
+  "Demo runner: walk one clean :tos/change-proposal lifecycle (escalate ->
+  human approves -> commit) through one OperationActor, plus all six HARD
+  governor checks, each independently tripped, plus a phase-0 read-only
+  hold and a MemStore->DatomicStore backend swap.
+
+  Run: clojure -M:dev:run"
+  (:require [langgraph.graph :as g]
+            [tosmonitor.store :as store]
+            [tosmonitor.registry :as registry]
+            [tosmonitor.operation :as op]))
+
+(defn- line [& xs] (println (apply str xs)))
+
+(defn- run-check!
+  "Run one :tos/change-proposal check on its own thread-id. If it interrupts
+  for human approval, a human archivist 'approves' and we resume --
+  mirroring a real approval workflow."
+  [actor thread-id candidate approve? & [extra]]
+  (let [request (merge {:op :tos/change-proposal :subject "starbucks-tos-1"
+                        :candidate candidate}
+                       extra)
+        res (g/run* actor {:request request :context {:actor-id "archivist-001"}}
+                    {:thread-id thread-id})]
+    (if (= :interrupted (:status res))
+      (do (line "   pending human approval (reason: "
+                (-> res :state :audit last :reason) ")")
+          (let [res2 (g/run* actor
+                             {:approval {:status (if approve? :approved :rejected)
+                                         :by "archivist-001"}}
+                             {:thread-id thread-id :resume? true})]
+            (line "   -> approval " (if approve? "granted" "rejected")
+                  " -> disposition = " (get-in res2 [:state :disposition]))
+            res2))
+      (do (line "   -> disposition = " (get-in res [:state :disposition])
+                "  (basis " (-> res :state :verdict :violations (->> (mapv :rule))) ")")
+          res))))
+
+(defn -main [& _]
+  (let [db    (store/seed-db)
+        actor (op/build db)
+        bl    (store/baseline db)
+        good-added-line "The company will notify registered users by e-mail at least 30 days before any material change to these Terms takes effect."
+        good-candidate {:full-text    (str (:full-text bl) "\n" good-added-line)
+                        :source-url   (:source-url bl)
+                        :retrieved-at "2026-07-24"
+                        :sha256       (registry/sha256-hex (str (:full-text bl) "\n" good-added-line))
+                        :doc-type     :terms-of-service}]
+
+    (line "== ToSMonitor-LLM (sealed); ToSArchiveGovernor active ==")
+    (line "company: " (:legal-name (store/company db)) " / baseline retrieved-at: " (:retrieved-at bl))
+
+    (line "\ncheck1  clean, grounded, material change (added a notice-of-change line)")
+    (run-check! actor "check1" good-candidate true)
+
+    (line "\ncheck2  clean, non-material (candidate text identical to baseline)")
+    (run-check! actor "check2" (assoc bl :retrieved-at "2026-07-24") true)
+
+    (line "\n-- six HARD governor checks, each independently tripped --")
+
+    (line "\nfail-grounding  proposal's LLM claims a quote never present in the candidate text")
+    (run-check! actor "fail-grounding" good-candidate true
+                {:force-cites ["This exact sentence does not appear anywhere in the candidate text."]})
+
+    (line "\nfail-provenance  candidate missing source-url")
+    (run-check! actor "fail-provenance" (dissoc good-candidate :source-url) true)
+
+    (line "\nfail-sha256  candidate's own sha256 does not match its own full-text")
+    (run-check! actor "fail-sha256" (assoc good-candidate :sha256 "0000000000000000000000000000000000000000000000000000000000000000") true)
+
+    (line "\nfail-retrieved-at  candidate retrieved-at is BEFORE the archived baseline's")
+    (run-check! actor "fail-retrieved-at" (assoc good-candidate :retrieved-at "2020-01-01"
+                                                                :sha256 (registry/sha256-hex (:full-text good-candidate))) true)
+
+    (line "\nfail-doc-type  candidate doc-type is not a known archive doc-type")
+    (run-check! actor "fail-doc-type" (assoc good-candidate :doc-type :unknown-type) true)
+
+    (line "\nfail-source-domain  candidate source-url does not belong to the archived company")
+    (run-check! actor "fail-source-domain" (assoc good-candidate :source-url "https://totally-unrelated-domain.example/terms") true)
+
+    (line "\n== audit ledger (append-only; the actor's OWN store, never tos.journal.edn) ==")
+    (doseq [f (store/ledger db)]
+      (line "  " (:disposition f) " · op=" (:op f) " · basis=" (pr-str (:basis f))))
+
+    (line "\n== phase 0 (read-only): the same clean check now holds (:phase-disabled) ==")
+    (let [db2 (store/seed-db)
+          a2  (op/build db2)
+          r   (g/run* a2 {:request {:op :tos/change-proposal :subject "starbucks-tos-1"
+                                    :candidate good-candidate}
+                          :context {:actor-id "archivist-001" :phase 0}}
+                      {:thread-id "phase0"})]
+      (line "  phase 0: disposition = " (get-in r [:state :disposition])
+            " (reason " (-> (store/ledger db2) last :phase-reason) ")"))
+
+    (line "\n== backend swap: DatomicStore runs the identical contract ==")
+    (let [ddb (store/datomic-seed-db)
+          da  (op/build ddb)]
+      (run-check! da "datomic-check1" good-candidate true)
+      (line "  DatomicStore ledger size = " (count (store/ledger ddb))))
+
+    (line "\ndone.")))
