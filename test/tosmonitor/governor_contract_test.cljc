@@ -1,0 +1,120 @@
+(ns tosmonitor.governor-contract-test
+  "The governor contract as executable tests -- the ToS-archive analog of
+  `commitledger`'s own `governor_contract_test.cljc`. The single invariant
+  under test: the ToSMonitor-LLM never records a verdict the
+  ToSArchiveGovernor would reject, and every decision (commit OR hold)
+  leaves exactly one ledger fact, and `:tos/change-proposal` NEVER
+  auto-commits, clean or not."
+  (:require [clojure.test :refer [deftest is testing]]
+            [langgraph.graph :as g]
+            [tosmonitor.store :as store]
+            [tosmonitor.registry :as registry]
+            [tosmonitor.operation :as op]))
+
+(defn- fresh []
+  (let [db (store/seed-db)]
+    [db (op/build db)]))
+
+(defn- good-candidate [db]
+  (let [bl (store/baseline db)
+        added "The company will notify registered users by e-mail at least 30 days before any material change to these Terms takes effect."
+        text  (str (:full-text bl) "\n" added)]
+    {:full-text    text
+     :source-url   (:source-url bl)
+     :retrieved-at "2026-07-24"
+     :sha256       (registry/sha256-hex text)
+     :doc-type     :terms-of-service}))
+
+(defn- exec [actor tid candidate & [extra]]
+  (g/run* actor
+          {:request (merge {:op :tos/change-proposal :subject "starbucks-tos-1"
+                            :candidate candidate}
+                           extra)
+           :context {:actor-id "archivist-001"}}
+          {:thread-id tid}))
+
+(deftest clean-material-change-escalates-then-approved-commits
+  (let [[db actor] (fresh)
+        c   (good-candidate db)
+        r1  (exec actor "t1" c)]
+    (is (= :interrupted (:status r1)) "even a clean proposal pauses for human approval")
+    (let [r2 (g/run* actor {:approval {:status :approved :by "archivist-001"}}
+                     {:thread-id "t1" :resume? true})]
+      (is (= :commit (get-in r2 [:state :disposition])))
+      (is (= 1 (count (store/ledger db))))
+      (is (= :commit (-> (store/ledger db) first :disposition))))))
+
+(deftest clean-material-change-escalates-then-rejected-holds
+  (let [[db actor] (fresh)
+        c  (good-candidate db)
+        _  (exec actor "t2" c)
+        r2 (g/run* actor {:approval {:status :rejected :by "archivist-001"}}
+                   {:thread-id "t2" :resume? true})]
+    (is (= :hold (get-in r2 [:state :disposition])))
+    (is (= :hold (-> (store/ledger db) first :disposition)))))
+
+(deftest grounding-violation-holds
+  (testing "the LLM claims a quote never present in the candidate's own text -> HOLD"
+    (let [[db actor] (fresh)
+          c  (good-candidate db)
+          r  (exec actor "t3" c {:force-cites ["This exact sentence does not appear anywhere in the candidate text."]})]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:grounding} (-> (store/ledger db) first :basis))))))
+
+(deftest provenance-incomplete-holds
+  (testing "candidate missing source-url -> HOLD"
+    (let [[db actor] (fresh)
+          c  (dissoc (good-candidate db) :source-url)
+          r  (exec actor "t4" c)]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:provenance-incomplete} (-> (store/ledger db) first :basis))))))
+
+(deftest sha256-mismatch-holds
+  (testing "candidate's own sha256 does not match its own full-text -> HOLD"
+    (let [[db actor] (fresh)
+          c  (assoc (good-candidate db) :sha256 "0000000000000000000000000000000000000000000000000000000000000000")
+          r  (exec actor "t5" c)]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:sha256-mismatch} (-> (store/ledger db) first :basis))))))
+
+(deftest retrieved-at-not-advancing-holds
+  (testing "candidate retrieved-at is BEFORE the archived baseline's own -> HOLD"
+    (let [[db actor] (fresh)
+          base (good-candidate db)
+          c    (assoc base :retrieved-at "2020-01-01" :sha256 (registry/sha256-hex (:full-text base)))
+          r    (exec actor "t6" c)]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:retrieved-at-not-advancing} (-> (store/ledger db) first :basis))))))
+
+(deftest doc-type-unknown-holds
+  (testing "candidate doc-type is not a known archive doc-type -> HOLD"
+    (let [[db actor] (fresh)
+          c  (assoc (good-candidate db) :doc-type :unknown-type)
+          r  (exec actor "t7" c)]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:doc-type-unknown} (-> (store/ledger db) first :basis))))))
+
+(deftest source-domain-mismatch-holds
+  (testing "candidate source-url does not belong to the archived company -> HOLD"
+    (let [[db actor] (fresh)
+          c  (assoc (good-candidate db) :source-url "https://totally-unrelated-domain.example/terms")
+          r  (exec actor "t8" c)]
+      (is (= :hold (get-in r [:state :disposition])))
+      (is (some #{:source-domain-mismatch} (-> (store/ledger db) first :basis))))))
+
+(deftest non-material-clean-proposal-still-escalates
+  (testing "identical-to-baseline candidate is governor-clean but STILL never auto-commits"
+    (let [[db actor] (fresh)
+          bl (store/baseline db)
+          r  (exec actor "t9" (assoc bl :retrieved-at "2026-07-24"))]
+      (is (= :interrupted (:status r))
+          "even a non-material, fully clean proposal pauses for human approval -- :tos/change-proposal is never auto-eligible at any phase"))))
+
+(deftest every-decision-leaves-one-ledger-fact
+  (testing "write-only-through-ledger: N operations -> N ledger facts"
+    (let [[db actor] (fresh)
+          c (good-candidate db)]
+      (exec actor "a" c {:force-cites ["not a real quote from the candidate"]})
+      (exec actor "b" (dissoc c :source-url))
+      (is (= 2 (count (store/ledger db)))
+          "one grounding-hold + one provenance-hold, both recorded"))))
