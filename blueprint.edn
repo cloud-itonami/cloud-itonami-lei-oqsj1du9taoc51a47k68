@@ -2,4 +2,7 @@
  :company/lei "OQSJ1DU9TAOC51A47K68"
  :company/jurisdiction "US-WA"
  :company/website "https://www.starbucks.com"
- :company/ticker "SBUX (NASDAQ)"}
+ :company/ticker "SBUX (NASDAQ)"
+ :company/contact-email "press@starbucks.com"
+ :company/contact-email-note "published as a mailto: link on the company's own site (https://www.starbucks.com/contact/), retrieved 2026-07-25T05:03:27.008Z by scripts/lei-contact-discover.cljs (GET only)"
+ :company/inquiry-form-url "https://www.starbucks.com/contact/"}
