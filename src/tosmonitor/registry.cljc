@@ -17,7 +17,7 @@
   match/mismatch -- documented, not silently assumed, matching this fleet's
   honest-scope-boundary convention (`commitledger.registry`'s JPN-only
   rate-ceiling tiers, its own no-live-HTTP self-registration check)."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 ;; ----------------------------- doc-type vocabulary -----------------------------
 
@@ -114,7 +114,7 @@
   boundary."
   [host company-host]
   (and (string? host) (string? company-host)
-       (= (base-domain (str/lower-case host)) (base-domain (str/lower-case company-host)))))
+       (= (base-domain (str/lower host)) (base-domain (str/lower company-host)))))
 
 (defn source-domain-matches-company?
   "The candidate's own :source-url domain must share the same base domain

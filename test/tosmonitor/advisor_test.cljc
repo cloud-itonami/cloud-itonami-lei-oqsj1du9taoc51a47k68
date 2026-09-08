@@ -1,5 +1,5 @@
 (ns tosmonitor.advisor-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [tosmonitor.advisor :as advisor]
             [tosmonitor.store :as store]))
