@@ -5,7 +5,7 @@
  ;; (forkable outside the workspace); the :local/root paths only resolve
  ;; inside the monorepo checkout — a standalone fork should override them
  ;; with git coordinates. Same top-level-:deps-not-just-:dev posture as
- ;; `cloud-itonami-commitment-ledger`'s deps.edn, so a bare `clojure -M:test`
+ ;; `cloud-itonami-commitment-ledger`'s deps.edn, so a bare `kbb -M:test`
  ;; resolves offline inside the monorepo checkout.
  :deps {
         ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
@@ -21,7 +21,7 @@
   :dev {:override-deps
         {io.github.com-junkawasaki/langchain-clj
          {:local/root "../../kotoba-lang/langchain"}}}
-  ;; clojure -M:dev:run  -> drive the demo through one OperationActor
+  ;; kbb -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "tosmonitor.sim"]}
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
