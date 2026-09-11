@@ -70,12 +70,12 @@ advisor's self-report:
 | `source-domain-mismatch-violations` | this actor's own distinctive check — a source-url that doesn't belong to the archived company (misattribution risk specific to an LEI-keyed independent archive) |
 
 ```bash
-clojure -M:dev:run     # clean lifecycle + all six HARD-hold checks + a phase-0 hold + a MemStore->DatomicStore swap
-clojure -M:dev:test    # governor contract · phase invariants · store parity · advisor smoke
-clojure -M:lint        # clj-kondo (errors fail; CI mirrors this)
+kbb -M:dev:run     # clean lifecycle + all six HARD-hold checks + a phase-0 hold + a MemStore->DatomicStore swap
+kbb -M:dev:test    # governor contract · phase invariants · store parity · advisor smoke
+kbb -M:lint        # clj-kondo (errors fail; CI mirrors this)
 ```
 
-`clojure -M:dev:run` and the test suite always use the deterministic mock-advisor — no
+`kbb -M:dev:run` and the test suite always use the deterministic mock-advisor — no
 live fetch of the company's current ToS page and no live `kotoba-server`/CACAO publish
 happen anywhere in this actor. `tosmonitor.advisor/llm-advisor` exists as a written,
 swappable seam but is not invoked. See

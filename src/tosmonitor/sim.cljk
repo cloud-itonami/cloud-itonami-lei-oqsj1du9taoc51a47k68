@@ -4,7 +4,7 @@
   governor checks, each independently tripped, plus a phase-0 read-only
   hold and a MemStore->DatomicStore backend swap.
 
-  Run: clojure -M:dev:run"
+  Run: kbb -M:dev:run"
   (:require [langgraph.graph :as g]
             [tosmonitor.store :as store]
             [tosmonitor.registry :as registry]
