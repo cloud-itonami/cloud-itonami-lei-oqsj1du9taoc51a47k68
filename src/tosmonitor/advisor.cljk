@@ -29,7 +29,7 @@
   own ground-truth fields, so tests can exercise
   `tosmonitor.governor/grounding-violations` and the high-stakes gate
   without needing a live model to misbehave on cue."
-  (:require #?(:clj  [clojure.edn :as edn]
+  (:require #?(:clj  [kotoba.lang.edn :as edn]
                :cljs [cljs.reader :as edn])
             [kotoba.lang.text :as str]
             [langchain.model :as model]
