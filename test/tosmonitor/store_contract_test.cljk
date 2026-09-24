@@ -3,7 +3,7 @@
   (MemStore | DatomicStore) -- the whole point of the `Store` protocol seam
   is that the actor, the ToSArchiveGovernor and the audit ledger never know
   which one they run on (`tosmonitor.store` ns docstring)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [tosmonitor.store :as store]))
 
 (def ^:private backends
