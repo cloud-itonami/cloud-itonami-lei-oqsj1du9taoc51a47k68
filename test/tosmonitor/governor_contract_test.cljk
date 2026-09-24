@@ -5,7 +5,7 @@
   ToSArchiveGovernor would reject, and every decision (commit OR hold)
   leaves exactly one ledger fact, and `:tos/change-proposal` NEVER
   auto-commits, clean or not."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [tosmonitor.store :as store]
             [tosmonitor.registry :as registry]

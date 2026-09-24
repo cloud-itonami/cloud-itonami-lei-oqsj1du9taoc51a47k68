@@ -1,5 +1,5 @@
 (ns tosmonitor.phase-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [tosmonitor.phase :as phase]))
 
 (deftest tos-change-proposal-never-in-any-auto-set
